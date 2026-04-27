@@ -1,354 +1,108 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
-import "./Register.css";
 
 const Register = () => {
+  const navigate = useNavigate();
   const [entrepriseCodes, setEntrepriseCodes] = useState([]);
-  const [comptableCodes, setComptableCodes] = useState([]);
   const [userData, setUserData] = useState({
-    code_entreprise: "",
-    code_comptable: "",
-    code_user: "",
-    identite: "",
-    position: "",
-    tel: "",
-    email: "",
-    mot_de_passe: "",
-    role: "utilisateur",
+    code_entreprise: "", code_comptable: "", code_user: "",
+    identite: "", position: "", tel: "", email: "",
+    mot_de_passe: "", role: "utilisateur",
   });
   const [errors, setErrors] = useState({});
-  const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
 
-  const validateField = (key, value, role) => {
-    let error = "";
+  useEffect(() => {
+    axios.get("/api/entreprises").then(r => setEntrepriseCodes(r.data)).catch(() => {});
+  }, []);
 
-    switch(key) {
-      case 'email':
-        if (!/\S+@\S+\.\S+/.test(value)) {
-          error = "Email invalide";
-        }
-        break;
-      case 'mot_de_passe':
-        if (value.length < 6) {
-          error = "Le mot de passe doit contenir au moins 6 caractères";
-        }
-        break;
-      case 'tel':
-        if (!/^[0-9]{8,15}$/.test(value)) {
-          error = "Téléphone invalide (8-15 chiffres)";
-        }
-        break;
-      case 'identite':
-        if (!value.trim()) {
-          error = "L'identité est requise";
-        }
-        break;
-      case 'position':
-        if (!value.trim()) {
-          error = "La position est requise";
-        }
-        break;
-      case 'code_user':
-        if (role === 'utilisateur' && !value.trim()) {
-          error = "Le code utilisateur est requis";
-        }
-        break;
-      case 'code_entreprise':
-        if (!value.trim()) {
-          error = "Le code entreprise est requis";
-        }
-        break;
-      case 'code_comptable':
-        if (role === 'comptable' && !value.trim()) {
-          error = "Le code comptable est requis";
-        }
-        break;
-      default:
-        break;
-    }
-
-    setErrors(prev => ({ ...prev, [key]: error }));
-    return !error;
-  };
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    setUserData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear error for this field
-    setErrors(prev => ({ ...prev, [name]: "" }));
-    
-    // Validate the field
-    validateField(name, value, userData.role);
-  };
-
-  const handleRoleChange = (e) => {
-    const { value } = e.target;
-    setUserData({
-      code_entreprise: "",
-      code_comptable: "",
-      code_user: "",
-      identite: "",
-      position: "",
-      tel: "",
-      email: "",
-      mot_de_passe: "",
-      role: value,
-    });
-    setErrors({});
+  const validate = () => {
+    const e = {};
+    if (!userData.identite.trim()) e.identite = "Requis";
+    if (!userData.position.trim()) e.position = "Requis";
+    if (!/\S+@\S+\.\S+/.test(userData.email)) e.email = "Email invalide";
+    if (userData.mot_de_passe.length < 6) e.mot_de_passe = "Min. 6 caractères";
+    if (!/^[0-9]{8,15}$/.test(userData.tel)) e.tel = "Téléphone invalide";
+    return e;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Validate all fields
-    let isValid = true;
-    const fieldsToValidate = ['identite', 'position', 'tel', 'email', 'mot_de_passe', 'code_entreprise'];
-    
-    if (userData.role === 'utilisateur') {
-      fieldsToValidate.push('code_user');
-    } else if (userData.role === 'comptable') {
-      fieldsToValidate.push('code_comptable');
-    }
-
-    for (const field of fieldsToValidate) {
-      const fieldIsValid = validateField(field, userData[field], userData.role);
-      if (!fieldIsValid) isValid = false;
-    }
-
-    if (!isValid) {
-      alert("Veuillez corriger les erreurs dans le formulaire");
-      return;
-    }
-
-    // Prepare data for submission
-  const submitData = {
-  code_entreprise: userData.code_entreprise,
-  identite: userData.identite,
-  position: userData.position,
-  tel: userData.tel,
-  email: userData.email,
-  mot_de_passe: userData.mot_de_passe,
-  role: userData.role,
-};
-
-// 👇 حسب الدور
-if (userData.role === "utilisateur") {
-  submitData.code_user = userData.code_user;
-}
-
-if (userData.role === "comptable") {
-  submitData.code_comptable = userData.code_comptable;
-}
-
-    console.log('Données envoyées :', submitData);
-
+    const errs = validate();
+    if (Object.keys(errs).length) { setErrors(errs); return; }
+    setLoading(true);
     try {
-      const response = await axios.post("http://localhost:5000/api/register", submitData);
-      console.log("Réponse du serveur:", response.data);
-      alert("Utilisateur ajouté avec succès !");
-      setTimeout(() => {
-        navigate("/");
-      }, 2000);
-    } catch (error) {
-      console.error("Erreur lors de l'inscription:", error.response?.data || error);
-      alert(error.response?.data?.message || "Erreur lors de l'inscription");
-    }
+      await axios.post("/api/register", userData);
+      setSuccess("Compte créé avec succès !");
+      setTimeout(() => navigate("/"), 2000);
+    } catch (err) {
+      setErrors({ general: err.response?.data?.message || "Erreur lors de la création" });
+    } finally { setLoading(false); }
   };
 
-  useEffect(() => {
-    const fetchEntrepriseCodes = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/code_entreprises");
-        setEntrepriseCodes(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-    fetchEntrepriseCodes();
-  }, []);
-
-  useEffect(() => {
-    const fetchComptableCodes = async () => {
-      try {
-        const res = await axios.get("http://localhost:5000/api/comptables");
-        setComptableCodes(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-    fetchComptableCodes();
-  }, []);
+  const Field = ({ label, name, type = "text", children }) => (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#374151", marginBottom: 5 }}>{label}</label>
+      {children || (
+        <input type={type} value={userData[name]} onChange={e => setUserData(p => ({ ...p, [name]: e.target.value }))}
+          style={{ width: "100%", padding: "9px 12px", border: `1.5px solid ${errors[name] ? "#e74c3c" : "#e2e8f0"}`, borderRadius: 8, fontSize: 13.5, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
+          onFocus={e => e.target.style.borderColor = "#27ae60"} onBlur={e => e.target.style.borderColor = errors[name] ? "#e74c3c" : "#e2e8f0"}
+        />
+      )}
+      {errors[name] && <div style={{ fontSize: 11.5, color: "#e74c3c", marginTop: 3 }}>{errors[name]}</div>}
+    </div>
+  );
 
   return (
-    <div className="container-fluid page-body-wrapper full-page-wrapper">
-      <div className="content-wrapper d-flex align-items-center auth px-0 pt-4">
-        <div className="row w-100 mx-0">
-          <div className="col-lg-6 mx-auto">
-            <div className="auth-form-light text-left py-5 px-4 px-sm-5">
-              <div className="brand-logo mb-3">
-                <img src="assets/images/logo-compta.png" alt="logo" />
-              </div>
-              <h4>New here?</h4>
-              <h6 className="font-weight-light">Signing up is easy. It only takes a few steps</h6>
-              <form className="pt-3" onSubmit={handleSubmit}>
-                {/* Role Selection Dropdown */}
-                <div className="form-group">
-                  <label htmlFor="role">Role</label>
-                  <select
-                    className="form-control"
-                    name="role"
-                    value={userData.role}
-                    onChange={handleRoleChange}
-                    style={{color: "black"}}
-                  >
-                    <option value="utilisateur">Utilisateur</option>
-                    <option value="comptable">Comptable</option>
-                  </select>
-                </div>
-
-                {/* Common Fields for both roles */}
-                <div className="form-group">
-                  <div className="row">
-                    <div className="col-md-6">
-                      <input
-                        type="text"
-                        className={`form-control rounded ${errors.identite ? "is-invalid" : ""}`}
-                        name="identite"
-                        value={userData.identite}
-                        onChange={handleChange}
-                        placeholder="Identité"
-                        required
-                      />
-                      {errors.identite && <div className="invalid-feedback">{errors.identite}</div>}
-                    </div>
-                    <div className="col-md-6">
-                      <input
-                        type="text"
-                        className={`form-control rounded ${errors.position ? "is-invalid" : ""}`}
-                        name="position"
-                        value={userData.position}
-                        onChange={handleChange}
-                        placeholder="Position"
-                        required
-                      />
-                      {errors.position && <div className="invalid-feedback">{errors.position}</div>}
-                    </div>
-                    <div className="col-md-6">
-                      <input
-                        type="tel"
-                        className={`form-control rounded ${errors.tel ? "is-invalid" : ""}`}
-                        name="tel"
-                        value={userData.tel}
-                        onChange={handleChange}
-                        placeholder="Téléphone"
-                        required
-                      />
-                      {errors.tel && <div className="invalid-feedback">{errors.tel}</div>}
-                    </div>
-                    <div className="col-md-6">
-                      <input
-                        type="email"
-                        className={`form-control rounded ${errors.email ? "is-invalid" : ""}`}
-                        name="email"
-                        value={userData.email}
-                        onChange={handleChange}
-                        placeholder="Email"
-                        required
-                      />
-                      {errors.email && <div className="invalid-feedback">{errors.email}</div>}
-                    </div>
-                    <div className="col-md-6">
-                      <input
-                        type="password"
-                        className={`form-control rounded ${errors.mot_de_passe ? "is-invalid" : ""}`}
-                        name="mot_de_passe"
-                        value={userData.mot_de_passe}
-                        onChange={handleChange}
-                        placeholder="Mot de Passe (min 6 caractères)"
-                        required
-                      />
-                      {errors.mot_de_passe && <div className="invalid-feedback">{errors.mot_de_passe}</div>}
-                    </div>
-                    <div className="col-md-6">
-                      <select
-                        style={{ color: "black" }}
-                        className={`form-control rounded ${errors.code_entreprise ? "is-invalid" : ""}`}
-                        name="code_entreprise"
-                        value={userData.code_entreprise}
-                        onChange={handleChange}
-                        required
-                      >
-                        <option value="">Sélectionner Code Entreprise</option>
-                        {entrepriseCodes.map((code, index) => (
-                          <option key={`${code.code_entreprise}-${index}`} value={code.code_entreprise}>
-                            {code.code_entreprise}
-                          </option>
-                        ))}
-                      </select>
-                      {errors.code_entreprise && <div className="invalid-feedback">{errors.code_entreprise}</div>}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Role-Specific Fields */}
-                {userData.role === "utilisateur" && (
-                  <div className="form-group">
-                    <div className="row">
-                      <div className="col-md-12">
-                        <input
-                          type="text"
-                          className={`form-control rounded ${errors.code_user ? "is-invalid" : ""}`}
-                          name="code_user"
-                          value={userData.code_user}
-                          onChange={handleChange}
-                          placeholder="Code Utilisateur"
-                          required
-                        />
-                        {errors.code_user && <div className="invalid-feedback">{errors.code_user}</div>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {userData.role === "comptable" && (
-                  <div className="form-group">
-                    <div className="row">
-                      <div className="col-md-12">
-                        <select
-                          className={`form-control rounded ${errors.code_comptable ? "is-invalid" : ""}`}
-                          style={{ color: "black" }}
-                          name="code_comptable"
-                          value={userData.code_comptable}
-                          onChange={handleChange}
-                          required
-                        >
-                          <option value="">Sélectionner Comptable</option>
-                          {comptableCodes.map((comptable, index) => (
-                            <option key={`${comptable.code_user}-${index}`} value={comptable.code_user}>
-                              {`${comptable.identite} - ${comptable.code_user}`}
-                            </option>
-                          ))}
-                        </select>
-                        {errors.code_comptable && <div className="invalid-feedback">{errors.code_comptable}</div>}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-3">
-                  <button type="submit" className="btn btn-primary btn-lg btn-block">
-                    SIGN UP
-                  </button>
-                </div>
-              </form>
-              <div className="text-center mt-4 font-weight-light">
-                Already have an account? <a href="/" className="text-primary">Login</a>
-              </div>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(135deg,#1a1f2e,#27ae60)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Inter',sans-serif" }}>
+      <div style={{ background: "#fff", borderRadius: 18, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", width: "100%", maxWidth: 520, overflow: "hidden" }}>
+        <div style={{ background: "linear-gradient(135deg,#27ae60,#1e8449)", padding: "24px 36px 20px", textAlign: "center" }}>
+          <div style={{ fontSize: 28, marginBottom: 6 }}>📝</div>
+          <h1 style={{ color: "#fff", fontSize: 20, fontWeight: 800, margin: 0 }}>Créer un compte</h1>
+          <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12.5, marginTop: 3 }}>Remplissez le formulaire ci-dessous</p>
+        </div>
+        <div style={{ padding: "24px 36px 28px" }}>
+          {errors.general && <div style={{ background: "#fdecea", border: "1px solid #f5c6c2", borderRadius: 8, padding: "10px 14px", color: "#c0392b", fontSize: 13, marginBottom: 14 }}>{errors.general}</div>}
+          {success && <div style={{ background: "#d5f5e3", border: "1px solid #a8e6c0", borderRadius: 8, padding: "10px 14px", color: "#1a7a3f", fontSize: 13, marginBottom: 14 }}>✅ {success}</div>}
+          <form onSubmit={handleSubmit}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+              <Field label="Identité *" name="identite" />
+              <Field label="Position *" name="position" />
+              <Field label="Téléphone *" name="tel" />
+              <Field label="Email *" name="email" type="email" />
+              <Field label="Mot de passe *" name="mot_de_passe" type="password" />
+              <Field label="Rôle">
+                <select value={userData.role} onChange={e => setUserData(p => ({ ...p, role: e.target.value }))}
+                  style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13.5, outline: "none", fontFamily: "inherit", background: "#fff" }}>
+                  <option value="utilisateur">Utilisateur</option>
+                  <option value="comptable">Comptable</option>
+                </select>
+              </Field>
+              {userData.role === "utilisateur" && (
+                <Field label="Code utilisateur" name="code_user" />
+              )}
+              {userData.role === "comptable" && (
+                <>
+                  <Field label="Code entreprise">
+                    <select value={userData.code_entreprise} onChange={e => setUserData(p => ({ ...p, code_entreprise: e.target.value }))}
+                      style={{ width: "100%", padding: "9px 12px", border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: 13.5, outline: "none", fontFamily: "inherit", background: "#fff" }}>
+                      <option value="">-- Sélectionner --</option>
+                      {entrepriseCodes.map(ec => <option key={ec.code_entreprise} value={ec.code_entreprise}>{ec.code_entreprise}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Code comptable" name="code_comptable" />
+                </>
+              )}
             </div>
-          </div>
+            <button type="submit" disabled={loading} style={{ width: "100%", padding: "11px", background: loading ? "#a0aec0" : "#27ae60", color: "#fff", border: "none", borderRadius: 9, fontSize: 14.5, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", marginTop: 6, fontFamily: "inherit" }}>
+              {loading ? "Création..." : "Créer mon compte"}
+            </button>
+            <p style={{ textAlign: "center", fontSize: 13, color: "#718096", marginTop: 14 }}>
+              Déjà un compte ? <Link to="/" style={{ color: "#27ae60", fontWeight: 600, textDecoration: "none" }}>Se connecter</Link>
+            </p>
+          </form>
         </div>
       </div>
     </div>

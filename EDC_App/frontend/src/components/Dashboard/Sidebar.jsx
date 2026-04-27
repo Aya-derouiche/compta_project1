@@ -1,155 +1,183 @@
-import React, { useContext } from "react";
-import { Link } from "react-router-dom";
-import "./Sidebar.css";
-import { UserContext } from "../Connexion/UserProvider";
+import React, { useContext, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { UserContext } from "../Connexion/UserProvider.jsx";
 
-const Sidebar = ({ isSidebarOpen }) => {
+const SIDEBAR_W = 255;
+
+const NAV_ITEMS = [
+  { icon: "⊞", label: "Dashboard",           to: "/home" },
+  { icon: "🏢", label: "Entreprises",          to: "/entreprises" },
+  { icon: "👥", label: "Utilisateurs",         to: "/users" },
+  { icon: "🤝", label: "Tiers",                to: "/tiers" },
+  { icon: "🛒", label: "Achats",               to: "/achats" },
+  { icon: "📋", label: "Commandes",            to: "/commandes" },
+  { icon: "🚚", label: "Livraisons",           to: "/livraisons" },
+  { icon: "🧾", label: "Facturations",         to: "/facturations" },
+  { icon: "↑",  label: "Réglements Émis",      to: "/reglements-emis" },
+  { icon: "↓",  label: "Réglements Reçus",     to: "/reglements-recus" },
+  { icon: "💰", label: "Versements",           to: "/versements" },
+  { icon: "👁", label: "Pointage Personnel",   to: "/fichePaie" },
+  { icon: "📁", label: "Docs Comptabilité",    to: "/documents-comptabilite" },
+  { icon: "📂", label: "Docs Direction",       to: "/documents-direction" },
+];
+
+const ADMIN_ITEMS = [
+  { icon: "🔍", label: "Requêtes",            to: "/requetes" },
+];
+
+const NavItem = ({ icon, label, to, active }) => (
+  <Link
+    to={to}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: 11,
+      padding: "10px 16px",
+      borderRadius: 9,
+      margin: "2px 10px",
+      textDecoration: "none",
+      color: active ? "#fff" : "#a0aec0",
+      background: active ? "#27ae60" : "transparent",
+      fontWeight: active ? 600 : 400,
+      fontSize: 13.5,
+      transition: "all 0.18s",
+      cursor: "pointer",
+    }}
+    onMouseEnter={e => {
+      if (!active) {
+        e.currentTarget.style.background = "#252d3d";
+        e.currentTarget.style.color = "#fff";
+      }
+    }}
+    onMouseLeave={e => {
+      if (!active) {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = "#a0aec0";
+      }
+    }}
+  >
+    <span style={{ fontSize: 16, width: 20, textAlign: "center", flexShrink: 0 }}>{icon}</span>
+    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
+  </Link>
+);
+
+const SectionLabel = ({ label }) => (
+  <div style={{
+    padding: "18px 20px 6px",
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: 1.2,
+    color: "#4a5568",
+    textTransform: "uppercase",
+  }}>
+    {label}
+  </div>
+);
+
+const Sidebar = ({ isSidebarOpen, setIsSidebarOpen }) => {
   const { user } = useContext(UserContext);
+  const location = useLocation();
 
   return (
-    <nav className={`sidebar ${isSidebarOpen ? "open" : ""}`}>
-      <ul className="nav" style={{ marginLeft: "10px", marginTop: "70px" }}>
-        <li className="nav-item">
-          <Link className="nav-link" to="/home">
-            <i className="bi bi-grid menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Dashboard
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/entreprises">
-            <i className="bi bi-building menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Entreprises
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/users">
-            <i className="bi bi-people menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Utilisateurs
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/tiers">
-            <i className="bi bi-person-plus menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "15px" }}>
-              Liste des Tiers
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/achats">
-            <i className="bi bi-bag menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Achats de <br /> Biens et de Services{" "}
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/reglements_emis">
-            <i className="icon fas fa-arrow-alt-circle-up menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Reglements <br /> Emis
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/commandes">
-            <i className="bi bi-cart4 menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Commandes
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/livraisons">
-            <i className="bi bi-truck menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Livraisons
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/facturations">
-            <i className="bi bi-receipt menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Facturations
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/reglements_recus">
-            <i className="icon fas fa-arrow-alt-circle-down menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Reglements <br /> Reçus
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/versements">
-            <i className="bi bi-cash menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Versements
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/fichePaie">
-            <i className="menu-icon">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="16"
-                height="16"
-                fill="currentColor"
-                className="bi bi-fingerprint"
-                viewBox="0 0 16 16"
-              >
-                <path d="M8.06 6.5a.5.5 0 0 1 .5.5v.776a11.5 11.5 0 0 1-.552 3.519l-1.331 4.14a.5.5 0 0 1-.952-.305l1.33-4.141a10.5 10.5 0 0 0 .504-3.213V7a.5.5 0 0 1 .5-.5Z" />
-                <path d="M6.06 7a2 2 0 1 1 4 0 .5.5 0 1 1-1 0 1 1 0 1 0-2 0v.332q0 .613-.066 1.221A.5.5 0 0 1 6 8.447q.06-.555.06-1.115zm3.509 1a.5.5 0 0 1 .487.513 11.5 11.5 0 0 1-.587 3.339l-1.266 3.8a.5.5 0 0 1-.949-.317l1.267-3.8a10.5 10.5 0 0 0 .535-3.048A.5.5 0 0 1 9.569 8m-3.356 2.115a.5.5 0 0 1 .33.626L5.24 14.939a.5.5 0 1 1-.955-.296l1.303-4.199a.5.5 0 0 1 .625-.329" />
-                <path d="M4.759 5.833A3.501 3.501 0 0 1 11.559 7a.5.5 0 0 1-1 0 2.5 2.5 0 0 0-4.857-.833.5.5 0 1 1-.943-.334m.3 1.67a.5.5 0 0 1 .449.546 10.7 10.7 0 0 1-.4 2.031l-1.222 4.072a.5.5 0 1 1-.958-.287L4.15 9.793a9.7 9.7 0 0 0 .363-1.842.5.5 0 0 1 .546-.449Zm6 .647a.5.5 0 0 1 .5.5c0 1.28-.213 2.552-.632 3.762l-1.09 3.145a.5.5 0 0 1-.944-.327l1.089-3.145c.382-1.105.578-2.266.578-3.435a.5.5 0 0 1 .5-.5Z" />
-                <path d="M3.902 4.222a5 5 0 0 1 5.202-2.113.5.5 0 0 1-.208.979 4 4 0 0 0-4.163 1.69.5.5 0 0 1-.831-.556m6.72-.955a.5.5 0 0 1 .705-.052A4.99 4.99 0 0 1 13.059 7v1.5a.5.5 0 1 1-1 0V7a3.99 3.99 0 0 0-1.386-3.028.5.5 0 0 1-.051-.705M3.68 5.842a.5.5 0 0 1 .422.568q-.044.289-.044.59c0 .71-.1 1.417-.298 2.1l-1.14 3.923a.5.5 0 1 1-.96-.279L2.8 8.821A6.5 6.5 0 0 0 3.058 7q0-.375.054-.736a.5.5 0 0 1 .568-.422m8.882 3.66a.5.5 0 0 1 .456.54c-.084 1-.298 1.986-.64 2.934l-.744 2.068a.5.5 0 0 1-.941-.338l.745-2.07a10.5 10.5 0 0 0 .584-2.678.5.5 0 0 1 .54-.456" />
-                <path d="M4.81 1.37A6.5 6.5 0 0 1 14.56 7a.5.5 0 1 1-1 0 5.5 5.5 0 0 0-8.25-4.765.5.5 0 0 1-.5-.865m-.89 1.257a.5.5 0 0 1 .04.706A5.48 5.48 0 0 0 2.56 7a.5.5 0 0 1-1 0c0-1.664.626-3.184 1.655-4.333a.5.5 0 0 1 .706-.04ZM1.915 8.02a.5.5 0 0 1 .346.616l-.779 2.767a.5.5 0 1 1-.962-.27l.778-2.767a.5.5 0 0 1 .617-.346m12.15.481a.5.5 0 0 1 .49.51c-.03 1.499-.161 3.025-.727 4.533l-.07.187a.5.5 0 0 1-.936-.351l.07-.187c.506-1.35.634-2.74.663-4.202a.5.5 0 0 1 .51-.49" />
-              </svg>
-            </i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste du Pointage <br /> Personnel
-            </span>
-          </Link>
-        </li>
-        <li className="nav-item">
-          <Link className="nav-link" to="/documents_comptabilite">
-            <i className="bi bi-files menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Documents <br /> pour la Comptabilité
-            </span>
-          </Link>
-        </li>
+    <>
+      {/* Overlay for mobile */}
+      {isSidebarOpen && (
+        <div
+          onClick={() => setIsSidebarOpen(false)}
+          style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)",
+            zIndex: 99, display: "none",
+          }}
+        />
+      )}
 
-        <li className="nav-item">
-          <Link className="nav-link" to="/documents_direction">
-            <i className="bi bi-file-earmark menu-icon"></i>
-            <span className="menu-title" style={{ fontSize: "14px" }}>
-              Liste des Documents <br /> pour la Direction
-            </span>
-          </Link>
-        </li>
+      <aside style={{
+        position: "fixed",
+        top: 0, left: 0, bottom: 0,
+        width: SIDEBAR_W,
+        background: "#1a1f2e",
+        zIndex: 100,
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: "2px 0 8px rgba(0,0,0,0.15)",
+        overflowY: "auto",
+        overflowX: "hidden",
+      }}>
+        {/* Logo */}
+        <div style={{
+          height: 62,
+          display: "flex",
+          alignItems: "center",
+          padding: "0 20px",
+          borderBottom: "1px solid #252d3d",
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 9,
+            background: "linear-gradient(135deg,#27ae60,#1e8449)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 18, fontWeight: 800, color: "#fff", flexShrink: 0,
+          }}>E</div>
+          <div style={{ marginLeft: 10 }}>
+            <div style={{ color: "#fff", fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>EDC</div>
+            <div style={{ color: "#4a5568", fontSize: 11 }}>Gestion comptable</div>
+          </div>
+        </div>
 
-        {user.role !== "utilisateur" && (
-          <li className="nav-item">
-            <Link className="nav-link" to="/requetes">
-              <i className="fa fa-light fa-file-code menu-icon"></i>
-              <span className="menu-title" style={{ fontSize: "14px" }}>
-                Liste des Requêtes
-              </span>
-            </Link>
-          </li>
-        )}
-      </ul>
-    </nav>
+        {/* Nav */}
+        <nav style={{ flex: 1, paddingBottom: 20 }}>
+          <SectionLabel label="Navigation" />
+          {NAV_ITEMS.map(item => (
+            <NavItem
+              key={item.to}
+              {...item}
+              active={location.pathname === item.to}
+            />
+          ))}
+
+          {user?.role !== "utilisateur" && (
+            <>
+              <SectionLabel label="Administration" />
+              {ADMIN_ITEMS.map(item => (
+                <NavItem
+                  key={item.to}
+                  {...item}
+                  active={location.pathname === item.to}
+                />
+              ))}
+            </>
+          )}
+        </nav>
+
+        {/* User info at bottom */}
+        <div style={{
+          padding: "14px 16px",
+          borderTop: "1px solid #252d3d",
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          flexShrink: 0,
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: "50%",
+            background: "#27ae60",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 14, fontWeight: 700, color: "#fff", flexShrink: 0,
+          }}>
+            {user?.identite?.charAt(0)?.toUpperCase() || "U"}
+          </div>
+          <div style={{ overflow: "hidden" }}>
+            <div style={{ color: "#e2e8f0", fontSize: 13, fontWeight: 500,
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user?.identite || "Utilisateur"}
+            </div>
+            <div style={{ color: "#4a5568", fontSize: 11 }}>
+              {user?.role || ""}
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 };
 

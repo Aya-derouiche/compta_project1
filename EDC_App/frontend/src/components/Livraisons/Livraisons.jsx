@@ -1,221 +1,137 @@
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
-import React, { useContext, useEffect, useState } from "react";
-import ReactPaginate from "react-paginate";
-import { Link } from "react-router-dom";
-import { UserContext } from "../Connexion/UserProvider";
+import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
+import { UserContext } from "../Connexion/UserProvider.jsx";
+import {
+  PageLayout, PageHeader, AddButton, Card,
+  Toolbar, SearchInput, DataTable, TR, TD,
+  EditBtn, DeleteBtn, ViewBtn, Badge,
+  Pagination, Alert, Spinner,
+} from "../UI.jsx";
 
-const Livraisons = ({isSidebarOpen}) => {
-  const [livraisons, setLivraisons] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const [itemsPerPage] = useState(5);
+const ITEMS_PER_PAGE = 8;
+
+const Livraisons = () => {
   const { user } = useContext(UserContext);
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState("");
-
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchLivraisons = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        window.location.href = "/";
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token) { navigate("/"); return; }
+    const fetchData = async () => {
+      setLoading(true);
       try {
         const res = await axios.get("/api/livraisons", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            code_entreprise: selectedClient || undefined, // Ajouter le code_entreprise à la requête
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-        console.log(res.data);
-        setLivraisons(res.data);
+        setItems(res.data);
       } catch (err) {
-        console.log(err);
+        if (err.response?.status === 403) navigate("/");
+        else setError("Erreur lors du chargement des données.");
+      } finally {
+        setLoading(false);
       }
     };
+    fetchData();
+  }, [navigate]);
 
-    const fetchClients = async () => {
-      try {
-        const res = await axios.get("/api/clients");
-        setClients(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    fetchLivraisons();
-    fetchClients();
-  }, [selectedClient]);
-
-
-
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(0);
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Supprimer cet élément ?",
+      text: "Cette action est irréversible.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e74c3c",
+      cancelButtonColor: "#a0aec0",
+      confirmButtonText: "Supprimer",
+      cancelButtonText: "Annuler",
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`/api/livraisons/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      setItems(prev => prev.filter(i => i.id !== id));
+      Swal.fire({ icon: "success", title: "Supprimé !", timer: 1500, showConfirmButton: false });
+    } catch {
+      Swal.fire({ icon: "error", title: "Erreur", text: "Impossible de supprimer." });
+    }
   };
 
-  const filteredLivraisons = livraisons.filter((livraison) => {
-    const searchTermLower = searchTerm.toLowerCase();
-    const isInClient =
-        !selectedClient || livraison.code_entreprise === selectedClient; // Filtrer par code_entreprise
-
-    return (
-        isInClient &&
-        (livraison.num_BL.toLowerCase().includes(searchTermLower) ||
-            livraison.code_tiers.toLowerCase().includes(searchTermLower) ||
-            livraison.tiers_saisie.toLowerCase().includes(searchTermLower) ||
-            livraison.reference_commande.toLowerCase().includes(searchTermLower) ||
-            new Date(livraison.date_BL)
-                .toLocaleDateString()
-                .includes(searchTermLower) ||
-            livraison.montant_total_BL.toString().includes(searchTermLower))
-    );
+  const filtered = items.filter(a => {
+    const q = search.toLowerCase();
+    return a.num_BL?.toLowerCase().includes(q) ||
+      a.code_tiers?.toLowerCase().includes(q) ||
+      a.tiers_saisie?.toLowerCase().includes(q) ||
+      a.reference_commande?.toLowerCase().includes(q) ||
+      a.ajoute_par?.toLowerCase().includes(q);
   });
 
-
-  const offset = currentPage * itemsPerPage;
-  const currentItems = filteredLivraisons.slice(offset, offset + itemsPerPage);
-  const pageCount = Math.ceil(filteredLivraisons.length / itemsPerPage);
-
-
-  const handlePageClick = ({ selected }) => {
-    setCurrentPage(selected);
-  };
-
-  const handleClientChange = (e) => {
-    setSelectedClient(e.target.value);
-    setCurrentPage(0);
-  };
-
+  const pageCount = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const current = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
   return (
-      <div className="main-panel">
-        <div className={`content-wrapper ${isSidebarOpen ? 'shifted' : ''}`}>
-          <div className="row">
-            <div className="col-lg-12 grid-margin stretch-card">
-              <div className="card">
-                <div className="card-body">
-                  <h2 className="titre text-center">Liste des Livraisons</h2>
-                  <br />
-                  <br />
-                  <div className="d-flex justify-content-between align-items-center mb-4">
-                    <div className="input-group" style={{ maxWidth: "300px" }}>
-                      <input
-                          type="search"
-                          className="form-control"
-                          placeholder="Rechercher..."
-                          value={searchTerm}
-                          onChange={handleSearchChange}
-                      />
-                      <div className="input-group-append">
-                      <span className="input-group-text">
-                        <i className="fas fa-search"></i>
-                      </span>
-                      </div>
-                    </div>
-                    {user.role !== "comptable" && (
-                        <Link to="/addLivraison">
-                          <button type="button" className="btn btn-dark ml-2">
-                            Ajouter une Livraison
-                          </button>
-                        </Link>
-                    )}{" "}
+    <PageLayout>
+      <PageHeader
+        title="Livraisons"
+        subtitle={`${filtered.length} livraison${filtered.length !== 1 ? "s" : ""} trouvé${filtered.length !== 1 ? "s" : ""}`}
+        action={user?.role !== "utilisateur" && <AddButton to="/addLivraison" label="Nouvelle livraison" />}
+      />
 
-                    {user.role === "comptable" && (
-                        <select
-                            className="form-control form-control-ms w-auto mx-2"
-                            style={{ color: "black" }}
-                            value={selectedClient}
-                            onChange={handleClientChange}
-                        >
-                          <option value="">Tous les Entreprises</option>
-                          {clients.map((client) => (
-                              <option key={client.code_entreprise} value={client.code_entreprise}>
-                                {`${client.code_entreprise} - ${client.identite}`}
-                              </option>
-                          ))}
-                        </select>
-                    )}
-                  </div>
+      {error && <Alert type="danger">{error}</Alert>}
 
-                  <div className="table-responsive pt-3">
-                    <table className="table table-sm">
-                      <thead>
-                      <tr>
-                        {user.role === "comptable" && <th>Ajouté par</th>}
-                        <th>Date du Bon de Livraison</th>
-                        <th>N° du Bon de Livraison</th>
-                        <th>Code Tiers</th>
-                        <th>Reference Commande</th>
-                        <th>
-                          Montant Total du <br></br>Bon de Livraison
-                        </th>
-                        <th></th>
-                      </tr>
-                      </thead>
-                      <tbody>
-                      {currentItems.map((livraison, index) => (
-                          <tr key={index}>
-                            {user.role === "comptable" && (
-                                <td>{livraison.identite}</td>
-                            )}
-                            <td>
-                              {new Date(livraison.date_BL).toLocaleDateString()}
-                            </td>
-                            <td>{livraison.num_BL}</td>
-                            <td>{livraison.code_tiers}</td>
-                            <td>{livraison.reference_commande}</td>
-                            <td>{livraison.montant_total_BL} DT</td>
-                            <td>
-                              <Link to={`/detailsLivraison/${livraison.id}`}>
-                                <button type="button" className="btn btn-primary">
-                                  Détails
-                                </button>
-                              </Link>
-                              &nbsp; &nbsp;
-                              {user.role === "utilisateur" && (
-                                  <Link to={`/updateLivraison/${livraison.id}`} >
-                                    <button type="button" className="btn btn-success">
-                                      Modifier
-                                    </button>
-                                  </Link>
-                              )}
-                            </td>
-                          </tr>
-                      ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="d-flex justify-content-center mt-5">
-                    <ReactPaginate
-                        previousLabel={"← Précédent"}
-                        nextLabel={"Suivant →"}
-                        breakLabel={"..."}
-                        pageCount={pageCount}
-                        marginPagesDisplayed={2}
-                        pageRangeDisplayed={3}
-                        onPageChange={handlePageClick}
-                        containerClassName={"pagination justify-content-center"}
-                        pageClassName={"page-item"}
-                        pageLinkClassName={"page-link"}
-                        previousClassName={"page-item"}
-                        previousLinkClassName={"page-link"}
-                        nextClassName={"page-item"}
-                        nextLinkClassName={"page-link"}
-                        breakClassName={"page-item"}
-                        breakLinkClassName={"page-link"}
-                        activeClassName={"active"}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      <Card>
+        <div style={{ padding: "16px 20px 0" }}>
+          <Toolbar>
+            <SearchInput
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
+            />
+          </Toolbar>
         </div>
-      </div>
+        <div style={{ padding: "0 20px" }}>
+          {loading ? <Spinner /> : (
+            <>
+              <DataTable columns={["Date BL", "N° BL", "Code tiers", "Tiers", "Réf. commande", "Montant total", "Ajouté par", "Actions"]} empty="Aucune donnée">
+                {current.map(a => (
+                  <TR key={a.id}>
+                    <TD>{a.date_BL ? new Date(a.date_BL).toLocaleDateString('fr-FR') : '—'}</TD>
+                    <TD style={{fontFamily:"monospace",fontSize:13}}>{a.num_BL}</TD>
+                    <TD style={{fontWeight:500}}>{a.code_tiers}</TD>
+                    <TD>{a.tiers_saisie}</TD>
+                    <TD>{a.reference_commande || '—'}</TD>
+                    <TD style={{fontWeight:600,color:"#1a202c"}}>{(parseFloat(a.montant_total_BL||0).toLocaleString('fr-FR',{minimumFractionDigits:3})) + ' DT'}</TD>
+                    <TD style={{color:"#718096",fontSize:13}}>{a.ajoute_par}</TD>
+                    <TD>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <ViewBtn to={`/detailsLivraison/${a.id}`} />
+                        <EditBtn to={`/updateLivraison/${a.id}`} />
+                        {user?.role !== "utilisateur" && <DeleteBtn onClick={() => handleDelete(a.id)} />}
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </DataTable>
+              {filtered.length > ITEMS_PER_PAGE && (
+                <Pagination
+                  pageCount={pageCount}
+                  currentPage={page}
+                  onPageChange={({ selected }) => setPage(selected)}
+                  total={filtered.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ height: 16 }} />
+      </Card>
+    </PageLayout>
   );
 };
 

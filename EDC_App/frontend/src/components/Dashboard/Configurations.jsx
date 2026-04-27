@@ -1,354 +1,112 @@
-import axios from "axios";
 import React, { useEffect, useState } from "react";
+import axios from "axios";
+import Swal from "sweetalert2";
+import { PageLayout, PageHeader, Card, FormField, Input, SubmitBtn, Alert, DataTable, TR, TD, DeleteBtn, Badge, Spinner } from "../UI.jsx";
 
-const Configurations = ({ isSidebarOpen }) => {
-  const [taxRates, setTaxRates] = useState([]);
-  const [newRate, setNewRate] = useState("");
-  const [editingRate, setEditingRate] = useState(null);
-  const [updatedRate, setUpdatedRate] = useState("");
+const Configurations = () => {
+  const [banques, setBanques] = useState([]);
+  const [taux, setTaux] = useState([]);
+  const [newBanque, setNewBanque] = useState("");
+  const [newTaux, setNewTaux] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [msg, setMsg] = useState("");
 
-  const [banks, setBanks] = useState([]);
-  const [newBank, setNewBank] = useState("");
-  const [editingBank, setEditingBank] = useState(null);
-  const [updatedBank, setUpdatedBank] = useState("");
-
-  // Fetch Tax Rates
-  const fetchTaxRates = async () => {
-    try {
-      const response = await axios.get(
-        "/api/taux_retenue_source"
-      );
-      setTaxRates(response.data);
-    } catch (error) {
-      console.error("Error fetching tax rates:", error);
-    }
-  };
+  const token = () => localStorage.getItem("token");
+  const headers = () => ({ Authorization: `Bearer ${token()}` });
 
   useEffect(() => {
-    fetchTaxRates();
+    Promise.all([
+      axios.get("/api/banques", { headers: headers() }),
+      axios.get("/api/taux-retenue-source", { headers: headers() }),
+    ]).then(([b, t]) => { setBanques(b.data); setTaux(t.data); }).finally(() => setLoading(false));
   }, []);
 
-  const addTaxRate = async () => {
+  const addBanque = async (e) => {
+    e.preventDefault();
+    if (!newBanque.trim()) return;
     try {
-      await axios.post("/api/taux_retenue_source", {
-        taux: newRate,
-      });
-      setNewRate("");
-      fetchTaxRates();
-    } catch (error) {
-      console.error("Error adding tax rate:", error);
-    }
+      const res = await axios.post("/api/banques", { name: newBanque }, { headers: headers() });
+      setBanques(prev => [...prev, res.data]);
+      setNewBanque(""); setMsg("Banque ajoutée !");
+      setTimeout(() => setMsg(""), 2000);
+    } catch { Swal.fire({ icon: "error", title: "Erreur", text: "Impossible d'ajouter la banque." }); }
   };
 
-  const modifTaxRate = async (id) => {
+  const deleteBanque = async (id) => {
+    const ok = await Swal.fire({ title: "Supprimer ?", icon: "warning", showCancelButton: true, confirmButtonColor: "#e74c3c", cancelButtonText: "Annuler", confirmButtonText: "Supprimer" });
+    if (!ok.isConfirmed) return;
+    await axios.delete(`/api/banques/${id}`, { headers: headers() });
+    setBanques(prev => prev.filter(b => b.id !== id));
+  };
+
+  const addTaux = async (e) => {
+    e.preventDefault();
+    if (!newTaux) return;
     try {
-      await axios.put(`/api/taux_retenue_source/modif/${id}`, {
-        taux: updatedRate,
-      });
-      setEditingRate(null);
-      setUpdatedRate("");
-      fetchTaxRates();
-    } catch (error) {
-      console.error("Error modifying tax rate:", error);
-    }
+      const res = await axios.post("/api/taux-retenue-source", { taux: parseFloat(newTaux) }, { headers: headers() });
+      setTaux(prev => [...prev, res.data]);
+      setNewTaux(""); setMsg("Taux ajouté !");
+      setTimeout(() => setMsg(""), 2000);
+    } catch { Swal.fire({ icon: "error", title: "Erreur", text: "Impossible d'ajouter le taux." }); }
   };
 
-  const toggleTaxRate = async (id, active) => {
-    try {
-      await axios.put(`/api/taux_retenue_source/${id}`, {
-        active: !active,
-      });
-      fetchTaxRates();
-    } catch (error) {
-      console.error("Error toggling tax rate:", error);
-    }
+  const deleteTaux = async (id) => {
+    const ok = await Swal.fire({ title: "Supprimer ?", icon: "warning", showCancelButton: true, confirmButtonColor: "#e74c3c", cancelButtonText: "Annuler", confirmButtonText: "Supprimer" });
+    if (!ok.isConfirmed) return;
+    await axios.delete(`/api/taux-retenue-source/${id}`, { headers: headers() });
+    setTaux(prev => prev.filter(t => t.id !== id));
   };
 
-  const cancelEditRate = () => {
-    setEditingRate(null);
-    setUpdatedRate("");
-  };
-
-  const handleDeleteRate = async (id) => {
-    try {
-      await axios.delete(`/api/taux_retenue_source/${id}`);
-      fetchTaxRates(); // Rafraîchir la liste après suppression
-    } catch (err) {
-      console.error("Error deleting tax rate:", err);
-    }
-  };
-
-  const confirmDeleteRate = (id) => {
-    if (window.confirm("Voulez-vous vraiment supprimer ce Taux ?")) {
-      handleDeleteRate(id);
-    }
-  };
-
-  // Fetch Banks
-  const fetchBanks = async () => {
-    try {
-      const response = await axios.get("/api/banques");
-      setBanks(response.data);
-    } catch (error) {
-      console.error("Error fetching banks:", error);
-    }
-  };
-
-  useEffect(() => {
-    fetchBanks();
-  }, []);
-
-  const addBank = async () => {
-    try {
-      await axios.post("/api/banques", {
-        bank: newBank,
-      });
-      setNewBank("");
-      fetchBanks();
-    } catch (error) {
-      console.error("Error adding bank:", error);
-    }
-  };
-
-  const modifBank = async (id) => {
-    try {
-      await axios.put(`/api/banques/modif/${id}`, {
-        bank: updatedBank,
-      });
-      setEditingBank(null);
-      setUpdatedBank("");
-      fetchBanks();
-    } catch (error) {
-      console.error("Error modifying bank:", error);
-    }
-  };
-
-  const toggleBank = async (id, active) => {
-    try {
-      await axios.put(`/api/banques/${id}`, {
-        active: !active,
-      });
-      fetchBanks();
-    } catch (error) {
-      console.error("Error toggling Bank:", error);
-    }
-  };
-
-  const cancelEditBank = () => {
-    setEditingBank(null);
-    setUpdatedBank("");
-  };
-
-  const handleDeleteBank = async (id) => {
-    try {
-      await axios.delete(`/api/banques/${id}`);
-      fetchBanks(); // Rafraîchir la liste après suppression
-    } catch (err) {
-      console.error("Error deleting bank:", err);
-    }
-  };
-
-  const confirmDeleteBank = (id) => {
-    if (window.confirm("Voulez-vous vraiment supprimer cette Banque ?")) {
-      handleDeleteBank(id);
-    }
-  };
+  if (loading) return <PageLayout><Spinner /></PageLayout>;
 
   return (
-    <div className="main-panel">
-      <div className={`content-wrapper ${isSidebarOpen ? "shifted" : ""}`}>
-        <div className="row">
-          <div className="col-lg-12 grid-margin stretch-card">
-            <div className="card">
-              <div className="card-body">
-                <h1 className="text-center">Configurations</h1>
-                <br />
-                {/* Tax Rates Section */}
-                <h3 style={{ textDecorationLine: "underline", color: "green" }}>
-                  - Taux de la Retenue à la Source
-                </h3>
-                <div className="col-md-4">
-                  <input
-                    type="text"
-                    value={newRate}
-                    onChange={(e) => setNewRate(e.target.value)}
-                    className="form-control mb-3 mt-3"
-                    placeholder="Taux de la retenue à la source"
-                  />
-                  <button onClick={addTaxRate} className="btn btn-info mb-5">
-                    Ajouter
-                  </button>
-                </div>
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Taux</th>
-                      <th>Actif</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {taxRates.map((rate) => (
-                      <tr key={rate.id}>
-                        <td>
-                          {editingRate === rate.id ? (
-                            <input
-                              type="text"
-                              value={updatedRate}
-                              onChange={(e) => setUpdatedRate(e.target.value)}
-                              className="form-control-sm"
-                            />
-                          ) : (
-                            `${rate.taux}%`
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={rate.active}
-                            onChange={() => toggleTaxRate(rate.id, rate.active)}
-                            className="form-check-input"
-                          />
-                          {rate.active ? "Oui" : "Non"}
-                        </td>
-                        <td>
-                          {editingRate === rate.id ? (
-                            <>
-                              <button
-                                onClick={() => modifTaxRate(rate.id)}
-                                className="btn btn-success btn-sm"
-                              >
-                                Enregistrer
-                              </button>
-                              <button
-                                onClick={cancelEditRate}
-                                className="btn btn-light btn-sm"
-                              >
-                                Annuler
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setEditingRate(rate.id);
-                                  setUpdatedRate(rate.taux);
-                                }}
-                                className="btn btn-warning btn-sm mr-2"
-                              >
-                                Modifier
-                              </button>
-                              <button
-                                onClick={() => confirmDeleteRate(rate.id)}
-                                className="btn btn-danger btn-sm"
-                              >
-                                Supprimer
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <br></br> <br></br>
-                <hr />
-                <br></br> <br></br>
-                {/* Banks Section */}
-                <h3 style={{ textDecorationLine: "underline", color: "green" }}>
-                  - Nom des Banques
-                </h3>
-                <div className="col-md-4">
-                  <input
-                    type="text"
-                    value={newBank}
-                    onChange={(e) => setNewBank(e.target.value)}
-                    className="form-control mb-3 mt-3"
-                    placeholder="Nom des banques"
-                  />
-                  <button onClick={addBank} className="btn btn-info mb-5">
-                    Ajouter
-                  </button>
-                </div>
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Nom</th>
-                      <th>Actif</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {banks.map((bank) => (
-                      <tr key={bank.id}>
-                        <td>
-                          {editingBank === bank.id ? (
-                            <input
-                              type="text"
-                              value={updatedBank}
-                              onChange={(e) => setUpdatedBank(e.target.value)}
-                              className="form-control-sm"
-                            />
-                          ) : (
-                            bank.name
-                          )}
-                        </td>
-                        <td>
-                          <input
-                            type="checkbox"
-                            checked={bank.active}
-                            onChange={() => toggleBank(bank.id, bank.active)}
-                            className="form-check-input"
-                          />
-                          {bank.active ? "Oui" : "Non"}
-                        </td>
-
-                        <td>
-                          {editingBank === bank.id ? (
-                            <>
-                              <button
-                                onClick={() => modifBank(bank.id)}
-                                className="btn btn-success btn-sm"
-                              >
-                                Enregistrer
-                              </button>
-                              <button
-                                onClick={cancelEditBank}
-                                className="btn btn-light btn-sm"
-                              >
-                                Annuler
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => {
-                                  setEditingBank(bank.id);
-                                  setUpdatedBank(bank.name);
-                                }}
-                                className="btn btn-warning btn-sm mr-2"
-                              >
-                                Modifier
-                              </button>
-                              <button
-                                onClick={() => confirmDeleteBank(bank.id)}
-                                className="btn btn-danger btn-sm"
-                              >
-                                Supprimer
-                              </button>
-                            </>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+    <PageLayout>
+      <PageHeader title="Configurations" subtitle="Gérez les paramètres de l'application" />
+      {msg && <Alert type="success">{msg}</Alert>}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {/* Banques */}
+        <Card>
+          <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: "#1a202c" }}>🏦 Banques</h2>
           </div>
-        </div>
+          <div style={{ padding: 20 }}>
+            <form onSubmit={addBanque} style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <Input value={newBanque} onChange={e => setNewBanque(e.target.value)} placeholder="Nom de la banque" style={{ flex: 1 }} />
+              <button type="submit" style={{ padding: "10px 16px", background: "#27ae60", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", fontSize: 13 }}>+ Ajouter</button>
+            </form>
+            <DataTable columns={["Banque", "Statut", ""]}>
+              {banques.map(b => (
+                <TR key={b.id}>
+                  <TD style={{ fontWeight: 500 }}>{b.name}</TD>
+                  <TD><Badge label={b.active ? "Active" : "Inactive"} color={b.active ? "success" : "secondary"} /></TD>
+                  <TD><DeleteBtn onClick={() => deleteBanque(b.id)} /></TD>
+                </TR>
+              ))}
+            </DataTable>
+          </div>
+        </Card>
+        {/* Taux */}
+        <Card>
+          <div style={{ padding: "18px 20px", borderBottom: "1px solid #f1f5f9" }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: "#1a202c" }}>📊 Taux de retenue à la source</h2>
+          </div>
+          <div style={{ padding: 20 }}>
+            <form onSubmit={addTaux} style={{ display: "flex", gap: 10, marginBottom: 20 }}>
+              <Input type="number" step="0.001" min="0" max="100" value={newTaux} onChange={e => setNewTaux(e.target.value)} placeholder="Taux (%)" style={{ flex: 1 }} />
+              <button type="submit" style={{ padding: "10px 16px", background: "#27ae60", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", fontSize: 13 }}>+ Ajouter</button>
+            </form>
+            <DataTable columns={["Taux (%)", ""]}>
+              {taux.map(t => (
+                <TR key={t.id}>
+                  <TD style={{ fontWeight: 600 }}>{parseFloat(t.taux).toFixed(3)} %</TD>
+                  <TD><DeleteBtn onClick={() => deleteTaux(t.id)} /></TD>
+                </TR>
+              ))}
+            </DataTable>
+          </div>
+        </Card>
       </div>
-    </div>
+    </PageLayout>
   );
 };
 

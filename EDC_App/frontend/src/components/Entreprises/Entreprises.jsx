@@ -1,188 +1,135 @@
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
-import React, { useContext, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { UserContext } from "../Connexion/UserProvider";
-import ReactPaginate from "react-paginate";
+import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
+import { UserContext } from "../Connexion/UserProvider.jsx";
+import {
+  PageLayout, PageHeader, AddButton, Card,
+  Toolbar, SearchInput, DataTable, TR, TD,
+  EditBtn, DeleteBtn, ViewBtn, Badge,
+  Pagination, Alert, Spinner,
+} from "../UI.jsx";
 
-const Entreprises = ({ isSidebarOpen }) => {
-  const [entreprises, setEntreprises] = useState(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const [itemsPerPage] = useState(5);
+const ITEMS_PER_PAGE = 8;
+
+const Entreprises = () => {
   const { user } = useContext(UserContext);
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchEntreprise = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        window.location.href = "/";
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token) { navigate("/"); return; }
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        let res;
-        if (user.role === "comptable" || user.role === "super_admin") {
-          res = await axios.get("/api/entreprises", {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-        } else {
-          res = await axios.get("/api/entreprises/user", {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-          });
-        }
-        setEntreprises(res.data);
+        const res = await axios.get("/api/entreprises", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setItems(res.data);
       } catch (err) {
-        console.log(err);
+        if (err.response?.status === 403) navigate("/");
+        else setError("Erreur lors du chargement des données.");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchEntreprise();
-  }, [user]);
+    fetchData();
+  }, [navigate]);
 
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(0);
+  const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Supprimer cet élément ?",
+      text: "Cette action est irréversible.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e74c3c",
+      cancelButtonColor: "#a0aec0",
+      confirmButtonText: "Supprimer",
+      cancelButtonText: "Annuler",
+    });
+    if (!result.isConfirmed) return;
+    try {
+      const token = localStorage.getItem("token");
+      await axios.delete(`/api/entreprises/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      setItems(prev => prev.filter(i => i.id !== id));
+      Swal.fire({ icon: "success", title: "Supprimé !", timer: 1500, showConfirmButton: false });
+    } catch {
+      Swal.fire({ icon: "error", title: "Erreur", text: "Impossible de supprimer." });
+    }
   };
 
-  const filtered = entreprises
-    ? entreprises.filter((entreprise) => {
-        const searchTermLower = searchTerm.toLowerCase();
-        return (
-          entreprise.code_entreprise.toLowerCase().includes(searchTermLower) ||
-          new Date(entreprise.date_creation)
-            .toLocaleDateString()
-            .includes(searchTermLower) ||
-          entreprise.identite.toLowerCase().includes(searchTermLower) ||
-          entreprise.responsable.toLowerCase().includes(searchTermLower) ||
-          entreprise.adresse.toLowerCase().includes(searchTermLower)
-        );
-      })
-    : [];
+  const filtered = items.filter(a => {
+    const q = search.toLowerCase();
+    return a.code_entreprise?.toLowerCase().includes(q) ||
+      a.identite?.toLowerCase().includes(q) ||
+      a.responsable?.toLowerCase().includes(q) ||
+      a.email?.toLowerCase().includes(q);
+  });
 
-  const offset = currentPage * itemsPerPage;
-  const currentItems = filtered.slice(offset, offset + itemsPerPage);
-  const pageCount = Math.ceil(filtered.length / itemsPerPage);
-
-  const handlePageClick = ({ selected }) => {
-    setCurrentPage(selected);
-  };
+  const pageCount = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const current = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
   return (
-    <div className="main-panel">
-      <div className={`content-wrapper ${isSidebarOpen ? "shifted" : ""}`}>
-        <div className="row">
-          <div className="col-lg-12 grid-margin stretch-card">
-            <div className="card">
-              <div className="card-body">
-                <h2 className="font-medium text-center mb-5">
-                  Liste des Entreprises
-                </h2>
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                  <div className="input-group" style={{ maxWidth: "300px" }}>
-                    <input
-                      type="search"
-                      className="form-control"
-                      placeholder="Rechercher..."
-                      value={searchTerm}
-                      onChange={handleSearchChange}
-                    />
-                    <div className="input-group-append">
-                      <span className="input-group-text">
-                        <i className="fas fa-search"></i>
-                      </span>
-                    </div>
-                  </div>
-                  {user.role !== "utilisateur" && (
-                    <Link to="/addEntreprise">
-                      <button type="button" className="btn btn-dark ml-2">
-                        Ajouter une Entreprise
-                      </button>
-                    </Link>
-                  )}
-                </div>
-                {entreprises && entreprises.length > 0 ? (
-                  <div className="table-responsive pt-3">
-                    <table className="table table-sm table-hover">
-                      <thead>
-                        <tr>
-                          <th>Code Entreprise</th>
-                          <th>Date de Creation</th>
-                          <th>Identite</th>
-                          <th>Responsable</th>
-                          <th>Adresse</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {currentItems.map((ent) => (
-                          <tr key={ent.id}>
-                            <td>{ent.code_entreprise}</td>
-                            <td>
-                              {new Date(ent.date_creation).toLocaleDateString()}
-                            </td>
-                            <td>{ent.identite}</td>
-                            <td>{ent.responsable}</td>
-                            <td>{ent.adresse}</td>
-                            <td>
-                              <Link to={`/detailsEntreprise/${ent.id}`}>
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                >
-                                  Détails
-                                </button>
-                              </Link>
-                              &nbsp;
-                              {user.role !== "utilisateur" && (
-                              <Link to={`/updateEntreprise/${ent.id}`}>
-                                <button
-                                  type="button"
-                                  className="btn btn-success"
-                                >
-                                  Modifier
-                                </button>
-                              </Link>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-center">
-                    Aucune entreprise disponible pour cet utilisateur.
-                  </p>
-                )}
-                <div className="d-flex justify-content-center mt-5">
-                  <ReactPaginate
-                    previousLabel={"← Précédent"}
-                    nextLabel={"Suivant →"}
-                    breakLabel={"..."}
-                    pageCount={pageCount}
-                    marginPagesDisplayed={2}
-                    pageRangeDisplayed={3}
-                    onPageChange={handlePageClick}
-                    containerClassName={"pagination justify-content-center"}
-                    pageClassName={"page-item"}
-                    pageLinkClassName={"page-link"}
-                    previousClassName={"page-item"}
-                    previousLinkClassName={"page-link"}
-                    nextClassName={"page-item"}
-                    nextLinkClassName={"page-link"}
-                    breakClassName={"page-item"}
-                    breakLinkClassName={"page-link"}
-                    activeClassName={"active"}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+    <PageLayout>
+      <PageHeader
+        title="Entreprises"
+        subtitle={`${filtered.length} entreprise${filtered.length !== 1 ? "s" : ""} trouvé${filtered.length !== 1 ? "s" : ""}`}
+        action={user?.role !== "utilisateur" && <AddButton to="/addEntreprise" label="Nouvelle entreprise" />}
+      />
+
+      {error && <Alert type="danger">{error}</Alert>}
+
+      <Card>
+        <div style={{ padding: "16px 20px 0" }}>
+          <Toolbar>
+            <SearchInput
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
+            />
+          </Toolbar>
         </div>
-      </div>
-    </div>
+        <div style={{ padding: "0 20px" }}>
+          {loading ? <Spinner /> : (
+            <>
+              <DataTable columns={["Code", "Identité", "MF/CIN", "Responsable", "Tél.", "Email", "Actions"]} empty="Aucune donnée">
+                {current.map(a => (
+                  <TR key={a.id}>
+                    <TD style={{fontFamily:"monospace",fontSize:13}}>{a.code_entreprise}</TD>
+                    <TD style={{fontWeight:500}}>{a.identite}</TD>
+                    <TD>{a['MF/CIN'] || '—'}</TD>
+                    <TD>{a.responsable || '—'}</TD>
+                    <TD>{a.tel || '—'}</TD>
+                    <TD>{a.email || '—'}</TD>
+                    <TD>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <ViewBtn to={`/detailsEntreprise/${a.id}`} />
+                        <EditBtn to={`/updateEntreprise/${a.id}`} />
+                        {user?.role !== "utilisateur" && <DeleteBtn onClick={() => handleDelete(a.id)} />}
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </DataTable>
+              {filtered.length > ITEMS_PER_PAGE && (
+                <Pagination
+                  pageCount={pageCount}
+                  currentPage={page}
+                  onPageChange={({ selected }) => setPage(selected)}
+                  total={filtered.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ height: 16 }} />
+      </Card>
+    </PageLayout>
   );
 };
 

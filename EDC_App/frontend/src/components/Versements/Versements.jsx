@@ -1,263 +1,131 @@
-import React, { useContext, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
-import { UserContext } from "../Connexion/UserProvider";
-import ReactPaginate from "react-paginate";
+import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
+import { UserContext } from "../Connexion/UserProvider.jsx";
+import {
+  PageLayout, PageHeader, AddButton, Card,
+  Toolbar, SearchInput, DataTable, TR, TD,
+  EditBtn, DeleteBtn, ViewBtn, Badge,
+  Pagination, Alert, Spinner,
+} from "../UI.jsx";
 
-const Versements = ({isSidebarOpen}) => {
-  const [versements, setVersements] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const [itemsPerPage] = useState(5);
+const ITEMS_PER_PAGE = 8;
+
+const Versements = () => {
   const { user } = useContext(UserContext);
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState("");
-
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const fetchVersements = async () => {
-
-      const token = localStorage.getItem("token");
-      if (!token) {
-        window.location.href = "/";
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token) { navigate("/"); return; }
+    const fetchData = async () => {
+      setLoading(true);
       try {
         const res = await axios.get("/api/versements", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          params: {
-            code_entreprise: selectedClient || undefined, // Ajouter le code_entreprise à la requête
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-        setVersements(res.data);
+        setItems(res.data);
       } catch (err) {
-        console.log(err);
+        if (err.response?.status === 403) navigate("/");
+        else setError("Erreur lors du chargement des données.");
+      } finally {
+        setLoading(false);
       }
     };
-
-    const fetchClients = async () => {
-      try {
-        const res = await axios.get("/api/clients");
-        setClients(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    fetchVersements();
-    fetchClients();
-  }, [selectedClient]);
-
-  const openImageViewer = (documentUrl) => {
-    const imageWindow = window.open("", "_blank");
-    const img = document.createElement("img");
-    img.src = documentUrl;
-    img.style.width = "40%";
-    img.style.height = "100%";
-    img.style.marginLeft = "350px";
-    imageWindow.document.body.appendChild(img);
-  };
-
-
-
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(0);
-  };
-
-  const filteredVersements = versements.filter((versement) => {
-    const searchTermLower = searchTerm.toLowerCase();
-    const isInClient =
-        !selectedClient || versement.code_entreprise === selectedClient; // Filtrer par code_entreprise
-
-    return (
-        isInClient &&(
-            new Date(versement.date_versement)
-                .toLocaleDateString()
-                .includes(searchTermLower) ||
-            versement.reference_bordereau_bulletin.toLowerCase().includes(searchTermLower))
-
-    );
-  });
-
-  const offset = currentPage * itemsPerPage;
-  const currentItems = filteredVersements.slice(offset, offset + itemsPerPage);
-  const pageCount = Math.ceil(filteredVersements.length / itemsPerPage);
-
-
-
-  const handleClientChange = (e) => {
-    setSelectedClient(e.target.value);
-    setCurrentPage(0);
-  };
-
-  const handlePageClick = ({ selected }) => {
-    setCurrentPage(selected);
-  };
+    fetchData();
+  }, [navigate]);
 
   const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Supprimer cet élément ?",
+      text: "Cette action est irréversible.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e74c3c",
+      cancelButtonColor: "#a0aec0",
+      confirmButtonText: "Supprimer",
+      cancelButtonText: "Annuler",
+    });
+    if (!result.isConfirmed) return;
     try {
-      await axios.delete(`/api/versement/${id}`);
-      window.location.reload();
-    } catch (err) {
-      console.error("Error deleting versement:", err);
+      const token = localStorage.getItem("token");
+      await axios.delete(`/api/versements/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      setItems(prev => prev.filter(i => i.id !== id));
+      Swal.fire({ icon: "success", title: "Supprimé !", timer: 1500, showConfirmButton: false });
+    } catch {
+      Swal.fire({ icon: "error", title: "Erreur", text: "Impossible de supprimer." });
     }
   };
 
-  const confirmDelete = (id) => {
-    const confirmDelete = window.confirm("Voulez-vous vraiment supprimer ce versement ?");
-    if (confirmDelete) {
-      handleDelete(id);
-    }
-  };
+  const filtered = items.filter(a => {
+    const q = search.toLowerCase();
+    return a.reference_bordereau_bulletin?.toLowerCase().includes(q) ||
+      a.ajoute_par?.toLowerCase().includes(q);
+  });
+
+  const pageCount = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const current = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
   return (
-      <div className="main-panel">
-        <div className={`content-wrapper ${isSidebarOpen ? 'shifted' : ''}`}>
-          <div className="row">
-            <div className="col-lg-12 grid-margin stretch-card">
-              <div className="card">
-                <div className="card-body">
-                  <h2 className="titre text-center">Liste des Versements</h2>
-                  <br></br>
-                  <br />
-                  <div className="d-flex justify-content-between align-items-center mb-4">
-                    <div className="input-group" style={{ maxWidth: "300px" }}>
-                      <input
-                          type="search"
-                          className="form-control"
-                          placeholder="Rechercher..."
-                          value={searchTerm}
-                          onChange={handleSearchChange}
-                      />
-                      <div className="input-group-append">
-                      <span className="input-group-text">
-                        <i className="fas fa-search"></i>
-                      </span>
-                      </div>
-                    </div>
-                    {user.role === "utilisateur" && (
-                        <Link to="/addVersement">
-                          <button type="button" className="btn btn-dark">
-                            Ajouter un Versement
-                          </button>
-                        </Link>
-                    )}
-                    {user.role === "comptable" && (
-                        <select
-                            className="form-control form-control-ms w-auto mx-2"
-                            style={{ color: "black" }}
-                            value={selectedClient}
-                            onChange={handleClientChange}
-                        >
-                          <option value="">Tous les Entreprises</option>
-                          {clients.map((client) => (
-                              <option key={client.code_entreprise} value={client.code_entreprise}>
-                                {`${client.code_entreprise} - ${client.identite}`}
-                              </option>
-                          ))}
-                        </select>
-                    )}
-                  </div>
+    <PageLayout>
+      <PageHeader
+        title="Versements en Banque"
+        subtitle={`${filtered.length} versement${filtered.length !== 1 ? "s" : ""} trouvé${filtered.length !== 1 ? "s" : ""}`}
+        action={user?.role !== "utilisateur" && <AddButton to="/addVersement" label="Nouveau versement" />}
+      />
 
-                  <div className="table-responsive pt-3">
-                    <table className="table table-sm">
-                      <thead>
-                      <tr>
-                        {user.role === "comptable" && <th>Ajouté par</th>}
-                        <th>Date de Versement</th>
-                        <th>Reference Bordereau/Bulletin</th>
-                        <th>Document/Fichier à Inserer</th>
-                      </tr>
-                      </thead>
-                      <tbody>
-                      {currentItems.map((versement, index) => (
-                          <tr key={index}>
-                            {user.role === "comptable" && (
-                                <td>{versement.identite}</td>
-                            )}
-                            <td>
-                              {versement.date_versement
-                                  ? new Date(
-                                      versement.date_versement
-                                  ).toLocaleDateString()
-                                  : ""}
-                            </td>
-                            <td>{versement.reference_bordereau_bulletin}</td>
-                            <td>
-                              <button
-                                  type="button"
-                                  className="btn btn-link"
-                                  onClick={() =>
-                                      openImageViewer(versement.document_fichier)
-                                  }
-                              >
-                                View Document
-                              </button>
-                            </td>
+      {error && <Alert type="danger">{error}</Alert>}
 
-                            <td>
-                              <Link to={`/detailsVersement/${versement.id}`}>
-                                <button type="button" className="btn btn-primary">
-                                  Détails
-                                </button>
-                              </Link>
-                              &nbsp; &nbsp;
-
-                              {user.role === "utilisateur" && (
-                                  <>
-                                    <Link to={`/updateVersement/${versement.id}`}>
-                                      <button type="button" className="btn btn-success">
-                                        Modifier
-                                      </button>
-                                    </Link>
-                                    &nbsp; &nbsp;
-
-                                    <button
-                                        type="button"
-                                        className="btn btn-danger mr-2"
-                                        onClick={() => confirmDelete(versement.id)}
-                                    >
-                                      Supprimer
-                                    </button>
-                                  </>
-                              )}
-                            </td>
-                          </tr>
-                      ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <br />
-                  <div className="d-flex justify-content-center mt-5">
-                    <ReactPaginate
-                        previousLabel={"← Précédent"}
-                        nextLabel={"Suivant →"}
-                        breakLabel={"..."}
-                        pageCount={pageCount}
-                        marginPagesDisplayed={2}
-                        pageRangeDisplayed={3}
-                        onPageChange={handlePageClick}
-                        containerClassName={"pagination justify-content-center"}
-                        pageClassName={"page-item"}
-                        pageLinkClassName={"page-link"}
-                        previousClassName={"page-item"}
-                        previousLinkClassName={"page-link"}
-                        nextClassName={"page-item"}
-                        nextLinkClassName={"page-link"}
-                        breakClassName={"page-item"}
-                        breakLinkClassName={"page-link"}
-                        activeClassName={"active"}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      <Card>
+        <div style={{ padding: "16px 20px 0" }}>
+          <Toolbar>
+            <SearchInput
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
+            />
+          </Toolbar>
         </div>
-      </div>
+        <div style={{ padding: "0 20px" }}>
+          {loading ? <Spinner /> : (
+            <>
+              <DataTable columns={["Date versement", "Référence bordereau", "Observations", "Ajouté par", "Actions"]} empty="Aucune donnée">
+                {current.map(a => (
+                  <TR key={a.id}>
+                    <TD>{a.date_versement ? new Date(a.date_versement).toLocaleDateString('fr-FR') : '—'}</TD>
+                    <TD style={{fontFamily:"monospace",fontSize:13}}>{a.reference_bordereau_bulletin || '—'}</TD>
+                    <TD>{a.observations || '—'}</TD>
+                    <TD style={{color:"#718096",fontSize:13}}>{a.ajoute_par}</TD>
+                    <TD>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <ViewBtn to={`/detailsVersement/${a.id}`} />
+                        <EditBtn to={`/updateVersement/${a.id}`} />
+                        {user?.role !== "utilisateur" && <DeleteBtn onClick={() => handleDelete(a.id)} />}
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </DataTable>
+              {filtered.length > ITEMS_PER_PAGE && (
+                <Pagination
+                  pageCount={pageCount}
+                  currentPage={page}
+                  onPageChange={({ selected }) => setPage(selected)}
+                  total={filtered.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ height: 16 }} />
+      </Card>
+    </PageLayout>
   );
 };
 

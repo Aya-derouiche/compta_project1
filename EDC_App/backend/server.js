@@ -47,14 +47,21 @@ db.connect((err, client, release) => {
 });
 
 // ── PostgreSQL query helper (behaves like mysql callback style) ──
-const dbQuery = (sql, params, callback) => {
-  if (typeof params === 'function') { callback = params; params = []; }
-  db.query(sql, params || [], (err, result) => {
-    if (err) return callback(err, null);
-    callback(null, result.rows, result);
-  });
-};
+const dbQuery = (sql, params = [], callback) => {
 
+  // 🟢 إذا فما callback → استعمل الطريقة القديمة
+  if (typeof callback === "function") {
+    db.query(sql, params, (err, result) => {
+      if (err) return callback(err, null);
+      callback(null, result.rows);
+    });
+  }
+
+  // 🟢 إذا ما فماش callback → استعمل Promise
+  else {
+    return db.query(sql, params);
+  }
+};
 
 // ── MinIO (S3-compatible object storage) ──────────────────────────
 const Minio = require('minio');
@@ -1440,7 +1447,7 @@ app.put("/api/tiers/:id", (req, res) => {
 app.get("/api/tiers/:id", (req, res) => {
   const tierID = req.params.id;
   const q = `
-    SELECT tiers.*, GROUP_CONCAT(banques.name SEPARATOR ', ') AS banques
+    SELECT tiers.*, STRING_AGG(banques.name, ', ') AS banques
     FROM tiers
     LEFT JOIN tiers_banques ON tiers.id = tiers_banques.tier_id
     LEFT JOIN banques ON tiers_banques.banque_id = banques.id
@@ -4601,7 +4608,7 @@ app.get("/api/total-commandes-par-periode", (req, res) => {
 
   // If a company is provided, add it to the WHERE clause and parameters
   if (company) {
-    sql += " AND utilisateurs.code_entreprise = ?";
+    sql += " AND utilisateurs.code_entreprise = $3";
     params.push(company);
   }
 
@@ -4636,7 +4643,7 @@ app.get("/api/liste-clients-par-periode-creation", (req, res) => {
 
   // If a company is provided, add the filter for company
   if (company) {
-    sql += " AND code_entreprise = ?";
+    sql += " AND code_entreprise = $2";
     params.push(company);
   }
 
@@ -4676,7 +4683,7 @@ app.get("/api/etat-de-facturation", (req, res) => {
 
   // If a company is selected, filter by code_entreprise
   if (company) {
-    sql += " AND u.code_entreprise = ?";
+    sql += " AND u.code_entreprise = $3";
     params.push(company);
   }
 
@@ -4882,108 +4889,90 @@ app.get("/api/factures-non-payees", (req, res) => {
     res.send(result);
   });
 });
+// ─────────────────────────────────────────────
+// ROUTE: STATISTICS (FIXED)
+// ─────────────────────────────────────────────
+app.get("/api/statistics", async (req, res) => {
+  try {
+    const usersResult = await dbQuery(
+      `SELECT COUNT(*) AS totalusers FROM utilisateurs`
+    );
 
-// Route pour les statistiques
-app.get("/api/statistics", (req, res) => {
-  const stats = {};
+    const ordersResult = await dbQuery(
+      `SELECT COUNT(*) AS totalorders FROM commandes`
+    );
 
-  dbQuery(`SELECT COUNT(*) as totalUsers FROM utilisateurs WHERE role = 'utilisateur'`, (err, totalUsers) => {
-    if (err) {
-      console.error("Error fetching total users:", err);
-      return res.status(500).json({ error: "Error fetching total users" });
-    }
+    const deliveriesResult = await dbQuery(
+      `SELECT COUNT(*) AS totaldeliveries 
+       FROM commandes 
+       WHERE date_livraison_prevue IS NOT NULL`
+    );
 
-    stats.totalUsers = totalUsers[0]?.totalUsers || 0;
+    const invoicesResult = await dbQuery(
+      `SELECT COUNT(*) AS unpaidinvoices 
+       FROM facturations 
+       WHERE etat_payement = '0'`
+    );
 
-    dbQuery(`SELECT COUNT(*) as totalOrders FROM commandes`, (err, totalOrders) => {
-      if (err) {
-        console.error("Error fetching total orders:", err);
-        return res.status(500).json({ error: "Error fetching total orders" });
-      }
-
-      stats.totalOrders = totalOrders[0]?.totalOrders || 0;
-
-      dbQuery(`SELECT COUNT(*) as totalDeliveries FROM commandes WHERE date_livraison_prevue IS NOT NULL`, (err, totalDeliveries) => {
-        if (err) {
-          console.error("Error fetching total deliveries:", err);
-          return res.status(500).json({ error: "Error fetching total deliveries" });
-        }
-
-        stats.totalDeliveries = totalDeliveries[0]?.totalDeliveries || 0;
-
-        dbQuery(`SELECT COUNT(*) as unpaidInvoices FROM facturations WHERE etat_payement = '0'`, (err, unpaidInvoices) => {
-          if (err) {
-            console.error("Error fetching unpaid invoices:", err);
-            return res.status(500).json({ error: "Error fetching unpaid invoices" });
-          }
-
-          stats.unpaidInvoices = unpaidInvoices[0]?.unpaidInvoices || 0;
-
-          res.json(stats);
-        });
-      });
+    res.json({
+      totalUsers: parseInt(usersResult.rows[0].totalusers) || 0,
+      totalOrders: parseInt(ordersResult.rows[0].totalorders) || 0,
+      totalDeliveries: parseInt(deliveriesResult.rows[0].totaldeliveries) || 0,
+      unpaidInvoices: parseInt(invoicesResult.rows[0].unpaidinvoices) || 0,
     });
-  });
+
+  } catch (err) {
+    console.error("Erreur statistics:", err);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
 });
 
-// Route pour récupérer les commandes par période (CORRIGÉE pour PostgreSQL)
+
+// ─────────────────────────────────────────────
+// ROUTE: ORDERS PER PERIOD (FIXED)
+// ─────────────────────────────────────────────
 app.get('/api/orders-per-period', verifyToken, async (req, res) => {
   try {
     const userId = req.user?.id;
 
     if (!userId) {
-      console.error("User ID is undefined. Cannot fetch orders.");
-      return res.status(400).json({ success: false, error: "User ID is required" });
+      return res.status(400).json({ error: "User ID is required" });
     }
 
-    // Version PostgreSQL utilisant TO_CHAR
     const query = `
       SELECT 
-          TO_CHAR(date_commande, 'YYYY-MM') AS period, 
-          COUNT(*) AS count 
+        TO_CHAR(date_commande, 'YYYY-MM') AS period, 
+        COUNT(*) AS count 
       FROM commandes 
       WHERE ajoute_par = $1 
-      GROUP BY TO_CHAR(date_commande, 'YYYY-MM') 
+      GROUP BY period 
       ORDER BY period;
     `;
 
-    dbQuery(query, [userId], (err, rows) => {
-      if (err) {
-        console.error("Erreur lors de l'exécution de la requête:", {
-          message: err.message,
-          stack: err.stack,
-          sql: query,
-        });
-        return res.status(500).json({ success: false, error: "Erreur lors de la récupération des commandes par période" });
-      }
+    const result = await dbQuery(query, [userId]);
 
-      if (!Array.isArray(rows)) {
-        console.error("Format inattendu des données:", rows);
-        return res.status(500).json({ success: false, error: "Format inattendu des données reçues" });
-      }
+    const ordersPerPeriod = result.rows.map(row => ({
+      label: row.period,
+      count: parseInt(row.count),
+    }));
 
-      const ordersPerPeriod = rows.map(row => ({
-        label: row.period,
-        count: parseInt(row.count, 10),
-      }));
+    res.json({ ordersPerPeriod });
 
-      res.json({ success: true, ordersPerPeriod });
-    });
   } catch (err) {
-    console.error("Erreur lors de la récupération des commandes par période:", {
-      message: err.message,
-      stack: err.stack,
-    });
-    res.status(500).json({ success: false, error: "Erreur lors de la récupération des commandes par période" });
+    console.error("Erreur orders-per-period:", err);
+    res.status(500).json({ error: "Erreur serveur" });
   }
 });
 
 
-// Route pour servir le fichier index.html de React
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
-});
+// ─────────────────────────────────────────────
+// STATIC FILES (React build)
+// ─────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '../frontend/dist')));
 
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../frontend/dist', 'index.html'));
+});
 /***************************************************************** */
 
 

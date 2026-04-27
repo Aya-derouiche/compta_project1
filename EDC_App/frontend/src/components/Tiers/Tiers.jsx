@@ -1,321 +1,138 @@
-import React, {useContext, useEffect, useState} from "react";
+import React, { useEffect, useState, useContext } from "react";
 import axios from "axios";
-import {Link, Navigate} from "react-router-dom";
-import { toast, ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
-import ReactPaginate from "react-paginate";
-import { UserContext } from "../Connexion/UserProvider";
+import { useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
+import { UserContext } from "../Connexion/UserProvider.jsx";
+import {
+  PageLayout, PageHeader, AddButton, Card,
+  Toolbar, SearchInput, DataTable, TR, TD,
+  EditBtn, DeleteBtn, ViewBtn, Badge,
+  Pagination, Alert, Spinner,
+} from "../UI.jsx";
 
-const Tiers = ({ isSidebarOpen }) => {
-  const [tiers, setTiers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [currentPage, setCurrentPage] = useState(0);
-  const [itemsPerPage] = useState(4);
-  const [banksVisible, setBanksVisible] = useState({}); // To track which tier has banks visible
+const ITEMS_PER_PAGE = 8;
+
+const Tiers = () => {
   const { user } = useContext(UserContext);
-  const [clients, setClients] = useState([]);
-  const [selectedClient, setSelectedClient] = useState("");
-
-
-  useEffect(() => {
-    const fetchClients = async () => {
-      try {
-        const res = await axios.get("/api/clients");
-        setClients(res.data);
-      } catch (err) {
-        console.log(err);
-      }
-    };
-
-    fetchClients();
-  }, []);
-
+  const navigate = useNavigate();
+  const [items, setItems] = useState([]);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-
-    const fetchTiers = async () => {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        window.location.href = "/";
-        return;
-      }
+    const token = localStorage.getItem("token");
+    if (!token) { navigate("/"); return; }
+    const fetchData = async () => {
+      setLoading(true);
       try {
         const res = await axios.get("/api/tiers", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
-        setTiers(res.data.map((tier) => {
-          if (!tier.type || !tier.identite || !tier["MF/CIN"] || !tier.tel) {
-            console.error("Incomplete tier data:", tier);
-          }
-          return {
-            ...tier,
-            type: tier.type || "",
-            identite: tier.identite || "",
-            "MF/CIN": tier["MF/CIN"] || "",
-            tel: tier.tel || "",
-          };
-        }));
+        setItems(res.data);
       } catch (err) {
-        console.log(err);
+        if (err.response?.status === 403) navigate("/");
+        else setError("Erreur lors du chargement des données.");
+      } finally {
+        setLoading(false);
       }
     };
-    fetchTiers();
-  }, []);
+    fetchData();
+  }, [navigate]);
 
   const handleDelete = async (id) => {
+    const result = await Swal.fire({
+      title: "Supprimer cet élément ?",
+      text: "Cette action est irréversible.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#e74c3c",
+      cancelButtonColor: "#a0aec0",
+      confirmButtonText: "Supprimer",
+      cancelButtonText: "Annuler",
+    });
+    if (!result.isConfirmed) return;
     try {
-      await axios.delete(`/api/tiers/${id}`);
-      setTiers(tiers.filter((tier) => tier.id !== id));
-      toast.success("Tier supprimé avec succès");
-    } catch (err) {
-      if (err.response && err.response.status === 400) {
-        toast.error(err.response.data.error);
-      } else if (err.response && err.response.status === 500) {
-        toast.error("Le tier ne peut pas être supprimé car il est associé à d'autres données.");
-      } else {
-        toast.error("Erreur lors de la suppression du tier.");
-      }
-      console.error(err);
+      const token = localStorage.getItem("token");
+      await axios.delete(`/api/tiers/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      setItems(prev => prev.filter(i => i.id !== id));
+      Swal.fire({ icon: "success", title: "Supprimé !", timer: 1500, showConfirmButton: false });
+    } catch {
+      Swal.fire({ icon: "error", title: "Erreur", text: "Impossible de supprimer." });
     }
   };
 
-  const confirmDelete = (id) => {
-    const confirmDelete = window.confirm("Voulez-vous vraiment supprimer ce Tier ?");
-    if (confirmDelete) {
-      handleDelete(id);
-    }
-  };
-
-  const handleSearchChange = (e) => {
-    setSearchTerm(e.target.value);
-    setCurrentPage(0);
-  };
-
-
-  const filtered = tiers.filter((tier) => {
-    if (!tier) return false;
-
-    const searchTermLower = searchTerm.toLowerCase();
-    const isInClient =
-        !selectedClient || tier.code_entreprise === selectedClient;
-
-    return (
-        isInClient &&
-        (
-            (tier.code_tiers?.toLowerCase() || "").includes(searchTermLower) ||
-            (tier.date_creation ? new Date(tier.date_creation).toLocaleDateString() : "").includes(searchTermLower) ||
-            ((tier.type || "").toString()).includes(searchTermLower) ||
-            ((tier.identite || "").toString()).includes(searchTermLower) ||
-            ((tier["MF/CIN"] || "").toString()).includes(searchTermLower) ||
-            ((tier.tel || "").toString()).includes(searchTermLower)
-        )
-    );
+  const filtered = items.filter(a => {
+    const q = search.toLowerCase();
+    return a.code_tiers?.toLowerCase().includes(q) ||
+      a.identite?.toLowerCase().includes(q) ||
+      a.type?.toLowerCase().includes(q) ||
+      a.ville?.toLowerCase().includes(q) ||
+      a['MF/CIN']?.toLowerCase().includes(q) ||
+      a.ajoute_par?.toLowerCase().includes(q);
   });
 
-
-  const handleClientChange = (e) => {
-    setSelectedClient(e.target.value);
-    setCurrentPage(0);
-  };
-
-  const offset = currentPage * itemsPerPage;
-  const currentItems = filtered.slice(offset, offset + itemsPerPage);
-  const pageCount = Math.ceil(filtered.length / itemsPerPage);
-
-  const handlePageClick = ({ selected }) => {
-    setCurrentPage(selected);
-  };
-
-  if (!user) {
-    return <Navigate to="/404" replace />;
-  }
-
-  // Toggle banks visibility for a specific tier
-  const toggleBanks = async (tierId) => {
-    if (banksVisible[tierId]) {
-      setBanksVisible({ ...banksVisible, [tierId]: false });
-    } else {
-      try {
-        const res = await axios.get(`/api/tiers/${tierId}/banques`);
-        setBanksVisible({
-          ...banksVisible,
-          [tierId]: res.data, // Store the banks data
-        });
-      } catch (err) {
-        console.error(err);
-        toast.error("Erreur lors de la récupération des banques.");
-      }
-    }
-  };
+  const pageCount = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+  const current = filtered.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
 
   return (
-      <div className="main-panel">
-        <div className={`content-wrapper ${isSidebarOpen ? "shifted" : ""}`}>
-          <div className="row">
-            <div className="col-lg-12 grid-margin stretch-card">
-              <div className="card">
-                <div className="card-body">
-                  <h2 className="titre text-center">Liste des Tiers</h2>
-                  <br />
-                  <br />
-                  <div className="d-flex justify-content-between align-items-center mb-4">
-                    <div className="input-group" style={{ maxWidth: "300px" }}>
-                      <input
-                          type="search"
-                          className="form-control"
-                          placeholder="Rechercher..."
-                          value={searchTerm}
-                          onChange={handleSearchChange}
-                      />
-                      <div className="input-group-append">
-                      <span className="input-group-text">
-                        <i className="fas fa-search"></i>
-                      </span>
-                      </div>
-                    </div>
-                    {user.role !== "comptable" && (
-                        <Link to="/addTier">
-                          <button type="button" className="btn btn-dark ml-2">
-                            Ajouter un Tier
-                          </button>
-                        </Link>
-                    )}
-                    {user.role === "comptable" && (
-                        <select
-                            className="form-control w-auto mx-2"
-                            style={{ color: "black" }}
-                            value={selectedClient}
-                            onChange={handleClientChange}
-                        >
-                          <option value="">Tous les Entreprises</option>
-                          {clients.map((client) => (
-                              <option
-                                  key={client.code_entreprise}
-                                  value={client.code_entreprise}
-                              >
-                                {`${client.code_entreprise} - ${client.identite}`}
-                              </option>
-                          ))}
-                        </select>
-                    )}
-                  </div>
-                  <div className="table-responsive pt-4" style={{ overflowX: "unset" }}>
-                    <table className="table table-sm table-hover" style={{ fontSize: "12px" }}>
-                      <thead>
-                      <tr>
-                        {user.role === "comptable" && <th style={{ width: "80px" }}>Ajouté par</th>}
-                        <th style={{ width: "80px" }}>Code tiers</th>
-                        <th style={{ width: "100px" }}>Date de Creation</th>
-                        <th style={{ width: "70px" }}>Type</th>
-                        <th style={{ width: "120px" }}>Identite</th>
-                        <th style={{ width: "90px" }}>MF / CIN</th>
-                        <th style={{ width: "100px" }}>Telephone</th>
-                        <th style={{ width: "150px" }}>Email</th>
-                        <th style={{ width: "150px" }}>Adresse</th>
-                        <th style={{ width: "100px" }}></th>
-                      </tr>
-                      </thead>
-                      <tbody>
-                      {currentItems.map((tier) => (
-                          <React.Fragment key={tier.id}>
-                            <tr>
-                              {user.role === "comptable" && (
-                                  <td>{tier.identite}</td>
-                              )}
-                              <td>{tier.code_tiers}</td>
-                              <td>{new Date(tier.date_creation).toLocaleDateString()}</td>
-                              <td>{tier.type === "autre" ? tier.autreType : tier.type}</td>
-                              <td>{tier.identite}</td>
-                              <td>{tier["MF/CIN"]}</td>
-                              <td>{tier.tel}</td>
-                              <td>{tier.email}</td>
-                              <td>{tier.adresse}</td>
-                              <td>
-                                <button
-                                    type="button"
-                                    className="btn btn-info"
-                                    onClick={() => toggleBanks(tier.id)}
-                                >
-                                  {banksVisible[tier.id] ? "-" : "+"}
-                                </button>
-                                &nbsp;
-                                {user.role === "utilisateur" && (
-                                    <>
-                                      <Link to={`/updateTier/${tier.id}`}>
-                                        <button type="button" className="btn btn-success">
-                                          Modifier
-                                        </button>
-                                      </Link>
+    <PageLayout>
+      <PageHeader
+        title="Liste des Tiers"
+        subtitle={`${filtered.length} tiers${filtered.length !== 1 ? "s" : ""} trouvé${filtered.length !== 1 ? "s" : ""}`}
+        action={user?.role !== "utilisateur" && <AddButton to="/addTier" label="Nouveau tiers" />}
+      />
 
-                                      <button
-                                          type="button"
-                                          className="btn btn-danger"
-                                          onClick={() => confirmDelete(tier.id)}
-                                      >
-                                        Supprimer
-                                      </button>
-                                    </>
-                                )}
-                              </td>
-                            </tr>
-                            {banksVisible[tier.id] && (
-                                <tr>
-                                  <td colSpan="9">
-                                    <div className="bank-list d-flex flex-wrap">
-                                      <strong style={{ paddingTop: "15px" }}>Banques :</strong>
-                                      {banksVisible[tier.id].map((bank) => (
-                                          <div
-                                              key={bank.id}
-                                              className="bank-item m-2 p-2"
-                                              style={{
-                                                border: "1px solid #ccc",
-                                                borderRadius: "4px",
-                                                width: "200px",
-                                              }}
-                                          >
-                                            {bank.name}
-                                          </div>
-                                      ))}
-                                    </div>
-                                  </td>
-                                </tr>
-                            )}
-                          </React.Fragment>
-                      ))}
-                      </tbody>
-                    </table>
-                  </div>
+      {error && <Alert type="danger">{error}</Alert>}
 
-                  <div className="d-flex justify-content-center mt-5">
-                    <ReactPaginate
-                        previousLabel={"← Précédent"}
-                        nextLabel={"Suivant →"}
-                        breakLabel={"..."}
-                        pageCount={pageCount}
-                        marginPagesDisplayed={2}
-                        pageRangeDisplayed={3}
-                        onPageChange={handlePageClick}
-                        containerClassName={"pagination justify-content-center"}
-                        pageClassName={"page-item"}
-                        pageLinkClassName={"page-link"}
-                        previousClassName={"page-item"}
-                        previousLinkClassName={"page-link"}
-                        nextClassName={"page-item"}
-                        nextLinkClassName={"page-link"}
-                        breakClassName={"page-item"}
-                        breakLinkClassName={"page-link"}
-                        activeClassName={"active"}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+      <Card>
+        <div style={{ padding: "16px 20px 0" }}>
+          <Toolbar>
+            <SearchInput
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(0); }}
+            />
+          </Toolbar>
         </div>
-        <ToastContainer />
-      </div>
+        <div style={{ padding: "0 20px" }}>
+          {loading ? <Spinner /> : (
+            <>
+              <DataTable columns={["Code", "Type", "Identité", "MF/CIN", "Tél.", "Ville", "Ajouté par", "Actions"]} empty="Aucune donnée">
+                {current.map(a => (
+                  <TR key={a.id}>
+                    <TD style={{fontFamily:"monospace",fontSize:13}}>{a.code_tiers}</TD>
+                    <TD><Badge label={a ? a.type : "—"} color={(a.type==='Client'?'success':'default')} /></TD>
+                    <TD style={{fontWeight:500}}>{a.identite}</TD>
+                    <TD>{a['MF/CIN'] || '—'}</TD>
+                    <TD>{a.tel || '—'}</TD>
+                    <TD>{a.ville || '—'}</TD>
+                    <TD style={{color:"#718096",fontSize:13}}>{a.ajoute_par}</TD>
+                    <TD>
+                      <div style={{ display:"flex", gap:6 }}>
+                        
+                        <EditBtn to={`/updateTier/${a.id}`} />
+                        {user?.role !== "utilisateur" && <DeleteBtn onClick={() => handleDelete(a.id)} />}
+                      </div>
+                    </TD>
+                  </TR>
+                ))}
+              </DataTable>
+              {filtered.length > ITEMS_PER_PAGE && (
+                <Pagination
+                  pageCount={pageCount}
+                  currentPage={page}
+                  onPageChange={({ selected }) => setPage(selected)}
+                  total={filtered.length}
+                  itemsPerPage={ITEMS_PER_PAGE}
+                />
+              )}
+            </>
+          )}
+        </div>
+        <div style={{ height: 16 }} />
+      </Card>
+    </PageLayout>
   );
 };
 
